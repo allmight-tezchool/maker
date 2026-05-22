@@ -219,6 +219,39 @@
     -webkit-overflow-scrolling: touch;
   }
   .search-result:empty { margin-top: 0; }
+  .list-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, rgba(91,111,156,0.14), rgba(148,163,184,0.12));
+    border: 1px solid rgba(91,111,156,0.28);
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e293b;
+    user-select: none;
+  }
+  .list-toggle:active { opacity: 0.85; }
+  #listToggleArrow {
+    font-size: 12px;
+    color: #5b6f9c;
+    transition: transform 0.2s ease;
+  }
+  .list-toggle.open #listToggleArrow { transform: rotate(180deg); }
+  .list-wrap {
+    display: none;
+    margin-top: 8px;
+    max-height: 360px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid rgba(100,116,139,0.2);
+    border-radius: 10px;
+    padding: 8px;
+    background: rgba(255,255,255,0.5);
+  }
+  .list-wrap.open { display: block; }
   .search-item {
     display: flex;
     justify-content: space-between;
@@ -278,6 +311,19 @@
     box-shadow: 0 3px 10px rgba(185,28,28,0.3);
   }
   .chip button:active { opacity: 0.9; }
+  .chip button.tel-btn {
+    background: rgba(100,116,139,0.85);
+    box-shadow: none;
+    margin-right: 6px;
+  }
+  .chip button.tel-btn.on {
+    background: linear-gradient(135deg, #15803d, #22c55e);
+    box-shadow: 0 3px 10px rgba(21,128,61,0.3);
+  }
+  .chip button.tel-btn:disabled {
+    background: rgba(148,163,184,0.5);
+    opacity: 0.6;
+  }
   .staff-item {
     border: 1px solid rgba(100,116,139,0.22);
     border-radius: 12px;
@@ -436,28 +482,15 @@
     <div class="card">
       <label class="label">案件詳細（コピペ先）</label>
       <p class="hint">クライアントから届いた案件詳細をここに貼り付けてください。</p>
-      <textarea id="caseDetail" class="detail" placeholder="ここに案件詳細を貼り付け..." oninput="buildResult()"></textarea>
+      <textarea id="caseDetail" class="detail" placeholder="ここに案件詳細を貼り付け..." oninput="rebuildResult()"></textarea>
     </div>
 
     <div class="card">
-      <label class="label">スタッフ名・ID</label>
-      <p class="hint">スタッフ名を入力して検索し、出てきた候補をタップして選んでください。<br>スタッフ（送る相手）は<b>1人だけ</b>選べます。別の人を選ぶと入れ替わります。</p>
-      <input type="text" id="staffSearch" placeholder="スタッフ名で検索..." oninput="renderStaffSearch()">
-      <div id="staffSearchResult" class="search-result"></div>
-      <div id="staffList" class="selected-list"></div>
-    </div>
-
-    <div class="card">
-      <label class="label">同行者</label>
-      <p class="hint">スタッフ名を入力して検索し、出てきた候補をタップして追加してください。同行者は何人でも追加できます。</p>
-      <input type="text" id="companionSearch" placeholder="スタッフ名で検索..." oninput="renderCompanionSearch()">
-      <div id="companionSearchResult" class="search-result"></div>
-      <div id="companionList" class="selected-list"></div>
-      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;cursor:pointer;">
-        <input type="checkbox" id="companionShowId" style="width:auto;margin:0;" onchange="buildResult()">
-        同行者のスタッフIDも文面に載せる
-      </label>
-      <p class="hint" style="margin-top:4px;">通常はオフ（名前と連絡先のみ）。オンにすると同行者全員のIDも表示します。</p>
+      <label class="label">メンバー</label>
+      <p class="hint">スタッフ名を入力して検索し、出てきた候補をタップして追加してください。何人でも追加できます。<br>追加した人ごとに「℡」ボタンで電話番号を載せる／載せないを切り替えられます。</p>
+      <input type="text" id="memberSearch" placeholder="スタッフ名で検索..." oninput="renderMemberSearch()">
+      <div id="memberSearchResult" class="search-result"></div>
+      <div id="memberList" class="selected-list"></div>
     </div>
 
     <div class="card">
@@ -465,8 +498,12 @@
         <label class="label" style="margin:0;">案件詳細（完成）</label>
         <button class="btn green small" onclick="copyResult()">コピー</button>
       </div>
-      <textarea id="resultBox" class="result" readonly></textarea>
-      <button class="btn gray small" style="margin-top:8px;" onclick="clearCase()">入力をクリア</button>
+      <p class="hint">下の欄は直接書き換えて修正できます。メンバーや上の案件詳細を変えると、編集内容は上書きされます。</p>
+      <textarea id="resultBox" class="result" oninput="onResultEdited()"></textarea>
+      <div class="file-row" style="margin-top:8px;">
+        <button class="btn gray small" onclick="rebuildResult()">自動作成しなおす</button>
+        <button class="btn gray small" onclick="clearCase()">入力をクリア</button>
+      </div>
     </div>
 
   </div>
@@ -525,7 +562,15 @@
 
     <div class="card">
       <h2 class="section-title">登録済みスタッフ一覧</h2>
-      <div id="staffManageList"></div>
+      <label class="label" style="font-size:13px;">スタッフ検索</label>
+      <input type="text" id="manageSearch" placeholder="スタッフ名で検索..." oninput="renderStaffManageList()" style="margin-bottom:10px;">
+      <div class="list-toggle" id="listToggle" onclick="toggleStaffList()">
+        <span id="listToggleLabel">一覧表示</span>
+        <span id="listToggleArrow">▼</span>
+      </div>
+      <div id="staffListWrap" class="list-wrap">
+        <div id="staffManageList"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -630,8 +675,10 @@ function uid() {
 }
 
 /* ---- 案件作成ページ用の選択状態（保存しない＝閉じたら消える） ---- */
-var selectedCompanions = [];
-var selectedStaff = [];
+/* selectedMembers の各要素: {id, name, kana, staffId, contact, showTel} */
+var selectedMembers = [];
+/* 完成欄をユーザーが手で編集したかどうか */
+var resultEdited = false;
 
 /* =========================================================
    画面切り替え
@@ -740,8 +787,7 @@ function deleteStaff(id) {
   if (!s) return;
   confirmModal("スタッフの削除", "「"+s.name+"」を登録から削除します。よろしいですか？", function(){
     data.staff = data.staff.filter(function(x){ return x.id !== id; });
-    selectedCompanions = selectedCompanions.filter(function(x){ return x.id !== id; });
-    selectedStaff = selectedStaff.filter(function(x){ return x.id !== id; });
+    selectedMembers = selectedMembers.filter(function(x){ return x.id !== id; });
     save();
     refreshAll();
     toast("スタッフを削除しました");
@@ -751,15 +797,54 @@ function findStaff(id) {
   for (var i=0;i<data.staff.length;i++){ if (data.staff[i].id===id) return data.staff[i]; }
   return null;
 }
+/* 一覧表示の折りたたみ開閉 */
+function toggleStaffList() {
+  var wrap = document.getElementById("staffListWrap");
+  var toggle = document.getElementById("listToggle");
+  var open = wrap.classList.toggle("open");
+  toggle.classList.toggle("open", open);
+}
+/* 一覧表示を開いた状態にする（検索時などに使う） */
+function openStaffList() {
+  document.getElementById("staffListWrap").classList.add("open");
+  document.getElementById("listToggle").classList.add("open");
+}
+
 function renderStaffManageList() {
   var box = document.getElementById("staffManageList");
+  var label = document.getElementById("listToggleLabel");
   box.innerHTML = "";
+
   if (data.staff.length === 0) {
     box.innerHTML = '<div class="empty">まだスタッフが登録されていません。</div>';
+    if (label) label.textContent = "一覧表示";
     return;
   }
-  for (var i=0;i<data.staff.length;i++){
-    var s = data.staff[i];
+
+  /* 検索キーワードで絞り込み（名前・ふりがな両対応） */
+  var searchEl = document.getElementById("manageSearch");
+  var kw = searchEl ? searchEl.value.trim() : "";
+  var list = data.staff.filter(function(s){
+    return kw === "" ? true : staffMatches(s, kw);
+  });
+
+  /* 折りたたみの見出しに件数を出す。検索中なら自動で開く */
+  if (label) {
+    if (kw === "") {
+      label.textContent = "一覧表示（全 " + data.staff.length + " 名）";
+    } else {
+      label.textContent = "一覧表示（「" + kw + "」で " + list.length + " 名）";
+      openStaffList();
+    }
+  }
+
+  if (list.length === 0) {
+    box.innerHTML = '<div class="empty">「'+esc(kw)+'」に一致するスタッフがいません。</div>';
+    return;
+  }
+
+  for (var i=0;i<list.length;i++){
+    var s = list[i];
     var div = document.createElement("div");
     div.className = "staff-item";
     div.innerHTML =
@@ -778,32 +863,6 @@ function renderStaffManageList() {
 /* =========================================================
    案件作成：選択用プルダウンの中身
    ========================================================= */
-/* スタッフ検索：入力した名前で絞り込み、候補リストを表示 */
-function renderStaffSearch() {
-  var kw = document.getElementById("staffSearch").value.trim().toLowerCase();
-  var box = document.getElementById("staffSearchResult");
-  box.innerHTML = "";
-
-  if (data.staff.length === 0) {
-    box.innerHTML = '<div class="search-msg">スタッフ管理で登録してください</div>';
-    return;
-  }
-  if (kw === "") {
-    box.innerHTML = '<div class="search-msg">スタッフ名を入力すると候補が出ます</div>';
-    return;
-  }
-  var hits = data.staff.filter(function(s){
-    return staffMatches(s, kw);
-  });
-  if (hits.length === 0) {
-    box.innerHTML = '<div class="search-msg">「'+esc(kw)+'」に一致するスタッフがいません</div>';
-    return;
-  }
-  for (var i=0;i<hits.length;i++){
-    box.appendChild(makeSearchItem(hits[i], "staff"));
-  }
-}
-
 /* 同行者検索：入力した名前で絞り込み、候補リストを表示 */
 function renderCompanionSearch() {
   var kw = document.getElementById("companionSearch").value.trim().toLowerCase();
@@ -832,11 +891,11 @@ function renderCompanionSearch() {
 
 /* カタカナをひらがなに変換し、小文字化して検索用の文字列にそろえる */
 function normalizeForSearch(text) {
-  var s = String(text || "");
-  s = s.replace(/[\u30A1-\u30F6]/g, function(ch){
+  var str = String(text || "");
+  str = str.replace(/[\u30A1-\u30F6]/g, function(ch){
     return String.fromCharCode(ch.charCodeAt(0) - 0x60);
   });
-  return s.toLowerCase().replace(/\s+/g, "");
+  return str.toLowerCase().replace(/\s+/g, "");
 }
 
 /* スタッフ1人が検索語に一致するか（漢字名 と ふりがな の両方を見る） */
@@ -848,14 +907,35 @@ function staffMatches(staff, keyword) {
   return inName || inKana;
 }
 
-/* 検索結果の1行を作る（kind: "staff" または "companion"） */
-function makeSearchItem(s, kind) {
-  var picked;
-  if (kind === "staff") {
-    picked = selectedStaff.some(function(x){return x.id===s.id;});
-  } else {
-    picked = selectedCompanions.some(function(x){return x.id===s.id;});
+/* メンバー検索：入力した名前で絞り込み、候補リストを表示 */
+function renderMemberSearch() {
+  var kw = document.getElementById("memberSearch").value.trim();
+  var box = document.getElementById("memberSearchResult");
+  box.innerHTML = "";
+
+  if (data.staff.length === 0) {
+    box.innerHTML = '<div class="search-msg">スタッフ管理で登録してください</div>';
+    return;
   }
+  if (kw === "") {
+    box.innerHTML = '<div class="search-msg">スタッフ名を入力すると候補が出ます</div>';
+    return;
+  }
+  var hits = data.staff.filter(function(s){
+    return staffMatches(s, kw);
+  });
+  if (hits.length === 0) {
+    box.innerHTML = '<div class="search-msg">「'+esc(kw)+'」に一致するスタッフがいません</div>';
+    return;
+  }
+  for (var i=0;i<hits.length;i++){
+    box.appendChild(makeSearchItem(hits[i]));
+  }
+}
+
+/* 検索結果の1行を作る */
+function makeSearchItem(s) {
+  var picked = selectedMembers.some(function(x){return x.id===s.id;});
   var sub = "ID: " + (s.staffId ? esc(s.staffId) : "（未登録）");
   if (s.contact) sub += " ／ " + esc(s.contact);
 
@@ -864,127 +944,115 @@ function makeSearchItem(s, kind) {
   div.innerHTML =
     '<div><div class="si-name">'+esc(s.name)+'</div>'+
     '<div class="si-sub">'+sub+'</div></div>'+
-    '<div class="si-add">'+(picked ? "選択中" : "選ぶ")+'</div>';
-  div.onclick = function(){
-    if (kind === "staff") pickStaff(s.id);
-    else pickCompanion(s.id);
-  };
+    '<div class="si-add">'+(picked ? "追加済み" : "追加")+'</div>';
+  div.onclick = function(){ pickMember(s.id); };
   return div;
 }
 
-/* スタッフを選ぶ（1人まで・自動入れ替え） */
-function pickStaff(id) {
-  if (selectedStaff.length === 1 && selectedStaff[0].id === id) {
-    toast("すでに選ばれています"); return;
-  }
-  var s = findStaff(id);
-  if (!s) return;
-  var wasReplaced = selectedStaff.length > 0;
-  selectedStaff = [JSON.parse(JSON.stringify(s))];
-  renderSelectedLists();
-  renderStaffSearch();
-  buildResult();
-  toast(wasReplaced ? "スタッフを入れ替えました" : "スタッフを選択しました");
-}
-
-/* 同行者を追加（何人でも） */
-function pickCompanion(id) {
-  if (selectedCompanions.some(function(x){return x.id===id;})) {
+/* メンバーを追加（何人でも・電話表示は初期オフ） */
+function pickMember(id) {
+  if (selectedMembers.some(function(x){return x.id===id;})) {
     toast("すでに追加されています"); return;
   }
   var s = findStaff(id);
   if (!s) return;
-  selectedCompanions.push(JSON.parse(JSON.stringify(s)));
+  var m = JSON.parse(JSON.stringify(s));
+  m.showTel = false;
+  selectedMembers.push(m);
   renderSelectedLists();
-  renderCompanionSearch();
-  buildResult();
-  toast("同行者を追加しました");
+  renderMemberSearch();
+  rebuildResult();
+  toast("メンバーを追加しました");
 }
-function removeCompanion(id) {
-  selectedCompanions = selectedCompanions.filter(function(x){return x.id!==id;});
+function removeMember(id) {
+  selectedMembers = selectedMembers.filter(function(x){return x.id!==id;});
   renderSelectedLists();
-  renderCompanionSearch();
-  buildResult();
+  renderMemberSearch();
+  rebuildResult();
 }
-function removeStaff(id) {
-  selectedStaff = selectedStaff.filter(function(x){return x.id!==id;});
+/* メンバーごとの「電話番号を載せる」切り替え */
+function toggleMemberTel(id) {
+  for (var i=0;i<selectedMembers.length;i++){
+    if (selectedMembers[i].id === id) {
+      selectedMembers[i].showTel = !selectedMembers[i].showTel;
+    }
+  }
   renderSelectedLists();
-  renderStaffSearch();
-  buildResult();
+  rebuildResult();
 }
-function renderSelectedLists() {
-  var cl = document.getElementById("companionList");
-  var sl = document.getElementById("staffList");
-  cl.innerHTML = "";
-  sl.innerHTML = "";
 
-  if (selectedCompanions.length === 0) {
-    cl.innerHTML = '<div class="empty">同行者は未選択です</div>';
-  } else {
-    for (var i=0;i<selectedCompanions.length;i++){
-      cl.appendChild(makeChip(selectedCompanions[i], "removeCompanion"));
-    }
+/* 選んだメンバーの一覧（チップ）を表示 */
+function renderSelectedLists() {
+  var ml = document.getElementById("memberList");
+  ml.innerHTML = "";
+  if (selectedMembers.length === 0) {
+    ml.innerHTML = '<div class="empty">メンバーは未選択です</div>';
+    return;
   }
-  if (selectedStaff.length === 0) {
-    sl.innerHTML = '<div class="empty">スタッフは未選択です</div>';
-  } else {
-    for (var j=0;j<selectedStaff.length;j++){
-      sl.appendChild(makeChip(selectedStaff[j], "removeStaff"));
-    }
+  for (var i=0;i<selectedMembers.length;i++){
+    ml.appendChild(makeChip(selectedMembers[i]));
   }
 }
-function makeChip(s, removeFn) {
-  var sub = "ID: " + (s.staffId ? esc(s.staffId) : "（未登録）");
-  if (s.contact) sub += " ／ 連絡先: " + esc(s.contact);
+function makeChip(m) {
+  var sub = "ID: " + (m.staffId ? esc(m.staffId) : "（未登録）");
+  if (m.contact) {
+    sub += " ／ " + esc(m.contact);
+  } else {
+    sub += " ／ 連絡先（未登録）";
+  }
+  var telOn = m.showTel && m.contact;
+  var telBtnLabel = telOn ? "℡ 表示中" : "℡ 非表示";
+  var telBtnClass = telOn ? "tel-btn on" : "tel-btn";
+  var telBtnAttr = m.contact ? "" : ' disabled title="連絡先が未登録です"';
+
   var div = document.createElement("div");
   div.className = "chip";
   div.innerHTML =
-    '<div class="chip-info">'+esc(s.name)+
+    '<div class="chip-info">'+esc(m.name)+
       '<div class="chip-sub">'+sub+'</div>'+
     '</div>'+
-    '<button onclick="'+removeFn+'(\'' + s.id + '\')">外す</button>';
+    '<button class="'+telBtnClass+'" onclick="toggleMemberTel(\''+m.id+'\')"'+telBtnAttr+'>'+telBtnLabel+'</button>'+
+    '<button onclick="removeMember(\''+m.id+'\')">外す</button>';
   return div;
 }
 
 /* =========================================================
    完成文面の組み立て
-   構成：スタッフ名 / スタッフID / 同行者 / 連絡先 / 案件詳細
+   構成：メンバー一覧（1人1行）→ 空行 → 案件詳細
+   1行の形：名前　【スタッフID】　℡電話番号
+   （各項目の後ろに全角スペース1個。電話オフなら 名前　【ID】）
    ========================================================= */
-function buildResult() {
+function composeText() {
+  var ZEN = "\u3000"; /* 全角スペース */
   var lines = [];
 
-  if (selectedStaff.length === 1) {
-    lines.push("スタッフ名：" + selectedStaff[0].name + " さん");
-    lines.push("スタッフID：" + (selectedStaff[0].staffId || ""));
-  } else if (selectedStaff.length > 1) {
-    var names = selectedStaff.map(function(s){return s.name + " さん";}).join("、");
-    var ids = selectedStaff.map(function(s){return s.staffId || "";}).join("、");
-    lines.push("スタッフ名：" + names);
-    lines.push("スタッフID：" + ids);
-  } else {
-    lines.push("スタッフ名：　さん");
-    lines.push("スタッフID：");
+  for (var i=0;i<selectedMembers.length;i++){
+    var m = selectedMembers[i];
+    var line = m.name + ZEN + "【" + (m.staffId || "") + "】" + ZEN;
+    if (m.showTel && m.contact) {
+      line += "\u2121" + m.contact + ZEN;
+    }
+    lines.push(line);
   }
 
   lines.push("");
-
-  var showCompanionId = document.getElementById("companionShowId").checked;
-  if (selectedCompanions.length > 0) {
-    for (var i=0;i<selectedCompanions.length;i++){
-      var c = selectedCompanions[i];
-      lines.push("同行者：" + c.name + " さん");
-      if (showCompanionId) lines.push("スタッフID：" + (c.staffId || ""));
-      lines.push("連絡先：" + (c.contact || ""));
-      if (i < selectedCompanions.length - 1) lines.push("");
-    }
-    lines.push("");
-  }
-
-  lines.push("案件詳細");
   var detail = document.getElementById("caseDetail").value.trim();
   lines.push(detail);
 
-  document.getElementById("resultBox").value = lines.join("\n");
+  return lines.join("\n");
+}
+/* 自動作成：完成欄を組み立て直す（手編集の内容は上書きされる） */
+function rebuildResult() {
+  document.getElementById("resultBox").value = composeText();
+  resultEdited = false;
+}
+/* 旧名 buildResult を残しておく（他から呼ばれても動くように） */
+function buildResult() {
+  rebuildResult();
+}
+/* 完成欄がユーザーに手編集されたとき */
+function onResultEdited() {
+  resultEdited = true;
 }
 
 function copyResult() {
@@ -1052,12 +1120,13 @@ function manualCopyGuide() {
   toast("文面を選択しました。長押しして「コピー」を選んでください");
 }
 function clearCase() {
-  confirmModal("入力のクリア", "案件詳細の文章と、選んだ同行者・スタッフをすべてクリアします。よろしいですか？", function(){
+  confirmModal("入力のクリア", "案件詳細の文章、選んだメンバー、完成欄の編集内容をすべてクリアします。よろしいですか？", function(){
     document.getElementById("caseDetail").value = "";
-    selectedCompanions = [];
-    selectedStaff = [];
+    selectedMembers = [];
+    resultEdited = false;
     renderSelectedLists();
-    buildResult();
+    renderMemberSearch();
+    rebuildResult();
     toast("クリアしました");
   });
 }
@@ -1102,7 +1171,7 @@ function importData(event) {
         "登録済みスタッフを、ファイルの内容（"+staffList.length+"名）に置き換えます。よろしいですか？",
         function(){
           data.staff = staffList;
-          selectedCompanions = []; selectedStaff = [];
+          selectedMembers = [];
           save();
           refreshAll();
           toast("データを読み込みました");
@@ -1245,7 +1314,7 @@ function importCsv(event) {
       msg += " よろしいですか？";
       confirmModal("CSVの読み込み", msg, function(){
         data.staff = imported;
-        selectedCompanions = []; selectedStaff = [];
+        selectedMembers = [];
         save();
         refreshAll();
         toast("CSVから"+imported.length+"名を読み込みました");
@@ -1410,11 +1479,10 @@ function toast(msg) {
    全体の再描画
    ========================================================= */
 function refreshAll() {
-  renderStaffSearch();
-  renderCompanionSearch();
+  renderMemberSearch();
   renderSelectedLists();
   renderStaffManageList();
-  buildResult();
+  if (!resultEdited) rebuildResult();
   updateBanners();
 }
 
