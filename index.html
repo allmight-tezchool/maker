@@ -65,6 +65,48 @@
     background: linear-gradient(135deg, #93c5fd, #64748b);
     box-shadow: 0 0 12px rgba(147,197,253,0.7);
   }
+  #bookmarkBtn {
+    flex-shrink: 0;
+    padding: 8px 13px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f8fafc;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.28);
+    border-radius: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  #bookmarkBtn:active { background: rgba(255,255,255,0.22); }
+  .guide-step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(100,116,139,0.18);
+    font-size: 14px;
+    color: #334155;
+  }
+  .guide-step:last-child { border-bottom: none; }
+  .guide-step .step-num {
+    flex-shrink: 0;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b4d72, #5b6f9c);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .guide-device {
+    font-size: 12px;
+    font-weight: 700;
+    color: #5b6f9c;
+    margin-bottom: 6px;
+  }
   nav {
     display: flex;
     gap: 6px;
@@ -325,7 +367,10 @@
 <body>
 
 <header>
-  <h1>案件詳細Maker</h1>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <h1>案件詳細Maker</h1>
+    <button id="bookmarkBtn" onclick="showBookmarkGuide()">★ ホーム追加</button>
+  </div>
 </header>
 
 <nav>
@@ -489,6 +534,17 @@
     <div class="modal-actions">
       <button class="btn gray" onclick="closeModal()">キャンセル</button>
       <button class="btn red" id="modalOk">実行する</button>
+    </div>
+  </div>
+</div>
+
+<div id="guideBg" class="modal-bg">
+  <div class="modal">
+    <h3 id="guideTitle">このアプリを登録する</h3>
+    <p class="hint" id="guideLead" style="margin-top:-4px;"></p>
+    <div id="guideSteps"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn" onclick="closeGuide()">閉じる</button>
     </div>
   </div>
 </div>
@@ -825,7 +881,8 @@ function buildResult() {
 function copyResult() {
   var text = document.getElementById("resultBox").value;
   if (!text.trim()) { toast("文面がありません"); return; }
-  if (navigator.clipboard && navigator.clipboard.writeText) {
+  /* まず新しいコピー方式を試す（対応ブラウザなら一発でコピー） */
+  if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(function(){
       toast("コピーしました");
     }, function(){
@@ -835,19 +892,55 @@ function copyResult() {
     fallbackCopy(text);
   }
 }
+/* 旧方式のコピー：スマホでも効くよう、画面外に一時的なテキスト欄を作って使う */
 function fallbackCopy(text) {
+  var tmp = document.createElement("textarea");
+  tmp.value = text;
+  tmp.setAttribute("readonly", "");
+  tmp.style.position = "fixed";
+  tmp.style.top = "0";
+  tmp.style.left = "0";
+  tmp.style.width = "1px";
+  tmp.style.height = "1px";
+  tmp.style.opacity = "0";
+  tmp.contentEditable = "true";
+  document.body.appendChild(tmp);
+
+  var ok = false;
+  try {
+    tmp.focus();
+    /* iOSのSafari対策：範囲を作って選択する */
+    if (typeof tmp.setSelectionRange === "function") {
+      tmp.setSelectionRange(0, text.length);
+    }
+    var range = document.createRange();
+    range.selectNodeContents(tmp);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    tmp.setSelectionRange(0, text.length);
+    ok = document.execCommand("copy");
+  } catch(e) {
+    ok = false;
+  }
+  document.body.removeChild(tmp);
+
+  if (ok) {
+    toast("コピーしました");
+  } else {
+    /* それでもダメなら：完成文面を選択状態にして、長押しコピーを案内 */
+    manualCopyGuide();
+  }
+}
+/* 自動コピーがどうしても効かないとき：文面を選択状態にして手動コピーを促す */
+function manualCopyGuide() {
   var ta = document.getElementById("resultBox");
   ta.removeAttribute("readonly");
-  ta.select();
-  ta.setSelectionRange(0, 99999);
+  ta.focus();
   try {
-    document.execCommand("copy");
-    toast("コピーしました");
-  } catch(e) {
-    toast("コピーできませんでした。手動で選択してください");
-  }
-  ta.setAttribute("readonly","readonly");
-  window.getSelection().removeAllRanges();
+    ta.setSelectionRange(0, ta.value.length);
+  } catch(e) {}
+  toast("文面を選択しました。長押しして「コピー」を選んでください");
 }
 function clearCase() {
   confirmModal("入力のクリア", "案件詳細の文章と、選んだ同行者・スタッフをすべてクリアします。よろしいですか？", function(){
@@ -1119,6 +1212,70 @@ function confirmModal(title, msg, onOk) {
 }
 function closeModal() {
   document.getElementById("modalBg").classList.remove("show");
+}
+
+/* =========================================================
+   ブックマーク／ホーム画面追加の案内（端末を自動判別）
+   ========================================================= */
+function detectDevice() {
+  var ua = navigator.userAgent || "";
+  var isIOS = /iPhone|iPad|iPod/.test(ua) ||
+              (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/.test(ua);
+  if (isIOS) return "ios";
+  if (isAndroid) return "android";
+  return "pc";
+}
+function showBookmarkGuide() {
+  var device = detectDevice();
+  var lead = "";
+  var steps = [];
+  var deviceLabel = "";
+
+  if (device === "ios") {
+    deviceLabel = "iPhone / iPad";
+    lead = "ホーム画面に追加すると、アイコンから一発で開けます。";
+    steps = [
+      "画面下（または上）の共有ボタン（四角に上向き矢印）を押します。",
+      "メニューを下にスクロールし「ホーム画面に追加」を選びます。",
+      "右上の「追加」を押せば完了。ホーム画面にアイコンが並びます。"
+    ];
+  } else if (device === "android") {
+    deviceLabel = "Android";
+    lead = "ホーム画面に追加すると、アイコンから一発で開けます。";
+    steps = [
+      "画面右上のメニュー（点が3つ）を押します。",
+      "「ホーム画面に追加」または「アプリをインストール」を選びます。",
+      "「追加」を押せば完了。ホーム画面にアイコンが並びます。"
+    ];
+  } else {
+    deviceLabel = "パソコン";
+    lead = "ブラウザのお気に入り（ブックマーク）に登録できます。";
+    steps = [
+      "キーボードで Ctrl + D（Macは Command + D）を押します。",
+      "登録の小窓が出たら、名前を確認して「完了」を押します。",
+      "次からはお気に入り一覧からすぐ開けます。"
+    ];
+  }
+
+  document.getElementById("guideTitle").textContent = "このアプリを登録する";
+  document.getElementById("guideLead").textContent =
+    "お使いの端末：" + deviceLabel + " ／ " + lead;
+
+  var box = document.getElementById("guideSteps");
+  box.innerHTML = "";
+  for (var i=0;i<steps.length;i++){
+    var div = document.createElement("div");
+    div.className = "guide-step";
+    div.innerHTML =
+      '<div class="step-num">'+(i+1)+'</div>'+
+      '<div>'+esc(steps[i])+'</div>';
+    box.appendChild(div);
+  }
+  document.getElementById("guideBg").classList.add("show");
+}
+function closeGuide() {
+  document.getElementById("guideBg").classList.remove("show");
 }
 
 /* =========================================================
