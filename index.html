@@ -212,6 +212,47 @@
   }
   button.btn.small { padding: 9px 14px; font-size: 14px; min-height: 40px; }
   .selected-list { margin-top: 12px; }
+  .search-result {
+    margin-top: 8px;
+    max-height: 240px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .search-result:empty { margin-top: 0; }
+  .search-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 11px 13px;
+    margin-bottom: 6px;
+    background: rgba(255,255,255,0.7);
+    border: 1px solid rgba(100,116,139,0.22);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .search-item:active { background: rgba(91,111,156,0.16); }
+  .search-item .si-name { font-weight: 600; color: #1e293b; font-size: 14px; }
+  .search-item .si-sub { font-size: 12px; color: #64748b; }
+  .search-item .si-add {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #3b4d72;
+    background: rgba(91,111,156,0.16);
+    border-radius: 8px;
+    padding: 6px 12px;
+  }
+  .search-item.is-picked .si-add {
+    color: #15803d;
+    background: rgba(21,128,61,0.14);
+  }
+  .search-msg {
+    font-size: 13px;
+    color: #64748b;
+    text-align: center;
+    padding: 12px 0;
+  }
   .chip {
     display: flex;
     justify-content: space-between;
@@ -400,25 +441,17 @@
 
     <div class="card">
       <label class="label">スタッフ名・ID</label>
-      <p class="hint">この案件で稼働するスタッフを選んで「追加」を押してください。<br>スタッフ（送る相手）は<b>1人だけ</b>選べます。別の人を追加すると入れ替わります。</p>
-      <div class="row">
-        <div>
-          <select id="staffSelect"></select>
-        </div>
-        <button class="btn" onclick="addStaff()">追加</button>
-      </div>
+      <p class="hint">スタッフ名を入力して検索し、出てきた候補をタップして選んでください。<br>スタッフ（送る相手）は<b>1人だけ</b>選べます。別の人を選ぶと入れ替わります。</p>
+      <input type="text" id="staffSearch" placeholder="スタッフ名で検索..." oninput="renderStaffSearch()">
+      <div id="staffSearchResult" class="search-result"></div>
       <div id="staffList" class="selected-list"></div>
     </div>
 
     <div class="card">
       <label class="label">同行者</label>
-      <p class="hint">登録済みのスタッフから選んで「追加」を押してください。</p>
-      <div class="row">
-        <div>
-          <select id="companionSelect"></select>
-        </div>
-        <button class="btn" onclick="addCompanion()">追加</button>
-      </div>
+      <p class="hint">スタッフ名を入力して検索し、出てきた候補をタップして追加してください。同行者は何人でも追加できます。</p>
+      <input type="text" id="companionSearch" placeholder="スタッフ名で検索..." oninput="renderCompanionSearch()">
+      <div id="companionSearchResult" class="search-result"></div>
       <div id="companionList" class="selected-list"></div>
       <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;cursor:pointer;">
         <input type="checkbox" id="companionShowId" style="width:auto;margin:0;" onchange="buildResult()">
@@ -465,11 +498,16 @@
     <div class="card">
       <h2 class="section-title" id="staffFormTitle">スタッフを登録</h2>
       <p class="hint">
-        スタッフ名は必須です。スタッフIDと連絡先は、<b>どちらか一方</b>が入っていれば登録できます。
+        スタッフ名は必須です。スタッフIDと連絡先は、<b>どちらか一方</b>が入っていれば登録できます。<br>
+        ふりがなは任意です。入れておくと、案件作成画面でひらがな検索ができます。
       </p>
       <div class="field">
         <label class="label">スタッフ名 <span style="color:#dc2626;">*必須</span></label>
         <input id="inName" type="text" placeholder="例：山田 太郎">
+      </div>
+      <div class="field">
+        <label class="label">ふりがな（任意）</label>
+        <input id="inKana" type="text" placeholder="例：やまだ たろう">
       </div>
       <div class="field">
         <label class="label">スタッフID（現場で使うID）</label>
@@ -650,6 +688,7 @@ function markBackup() {
    ========================================================= */
 function saveStaff() {
   var name = document.getElementById("inName").value.trim();
+  var kana = document.getElementById("inKana").value.trim();
   var sid = document.getElementById("inId").value.trim();
   var contact = document.getElementById("inContact").value.trim();
   if (!name) { toast("スタッフ名を入力してください"); return; }
@@ -659,13 +698,14 @@ function saveStaff() {
     for (var i=0;i<data.staff.length;i++){
       if (data.staff[i].id === editingStaffId) {
         data.staff[i].name = name;
+        data.staff[i].kana = kana;
         data.staff[i].staffId = sid;
         data.staff[i].contact = contact;
       }
     }
     toast("スタッフ情報を更新しました");
   } else {
-    data.staff.push({ id: uid(), name: name, staffId: sid, contact: contact });
+    data.staff.push({ id: uid(), name: name, kana: kana, staffId: sid, contact: contact });
     toast("スタッフを登録しました");
   }
   cancelEdit();
@@ -677,6 +717,7 @@ function editStaff(id) {
   if (!s) return;
   editingStaffId = id;
   document.getElementById("inName").value = s.name;
+  document.getElementById("inKana").value = s.kana || "";
   document.getElementById("inId").value = s.staffId || "";
   document.getElementById("inContact").value = s.contact || "";
   document.getElementById("staffFormTitle").textContent = "スタッフ情報を修正";
@@ -687,6 +728,7 @@ function editStaff(id) {
 function cancelEdit() {
   editingStaffId = null;
   document.getElementById("inName").value = "";
+  document.getElementById("inKana").value = "";
   document.getElementById("inId").value = "";
   document.getElementById("inContact").value = "";
   document.getElementById("staffFormTitle").textContent = "スタッフを登録";
@@ -722,6 +764,7 @@ function renderStaffManageList() {
     div.className = "staff-item";
     div.innerHTML =
       '<div class="staff-name">'+esc(s.name)+'</div>'+
+      (s.kana ? '<div class="staff-meta">ふりがな: '+esc(s.kana)+'</div>' : '')+
       '<div class="staff-meta">ID: '+(s.staffId ? esc(s.staffId) : '（未登録）')+'</div>'+
       '<div class="staff-meta">連絡先: '+(s.contact ? esc(s.contact) : '（未登録）')+'</div>'+
       '<div class="staff-actions">'+
@@ -735,72 +778,138 @@ function renderStaffManageList() {
 /* =========================================================
    案件作成：選択用プルダウンの中身
    ========================================================= */
-function renderSelects() {
-  var compSel = document.getElementById("companionSelect");
-  var staffSel = document.getElementById("staffSelect");
-  compSel.innerHTML = "";
-  staffSel.innerHTML = "";
+/* スタッフ検索：入力した名前で絞り込み、候補リストを表示 */
+function renderStaffSearch() {
+  var kw = document.getElementById("staffSearch").value.trim().toLowerCase();
+  var box = document.getElementById("staffSearchResult");
+  box.innerHTML = "";
 
   if (data.staff.length === 0) {
-    var o1 = document.createElement("option");
-    o1.textContent = "スタッフ管理で登録してください";
-    o1.value = "";
-    compSel.appendChild(o1);
-    staffSel.appendChild(o1.cloneNode(true));
+    box.innerHTML = '<div class="search-msg">スタッフ管理で登録してください</div>';
     return;
   }
-  var ph = document.createElement("option");
-  ph.value = "";
-  ph.textContent = "選択してください";
-  compSel.appendChild(ph);
-  staffSel.appendChild(ph.cloneNode(true));
-
-  for (var i=0;i<data.staff.length;i++){
-    var s = data.staff[i];
-    var label = s.staffId ? (s.name + "（" + s.staffId + "）") : s.name;
-    var opt = document.createElement("option");
-    opt.value = s.id;
-    opt.textContent = label;
-    compSel.appendChild(opt);
-    staffSel.appendChild(opt.cloneNode(true));
+  if (kw === "") {
+    box.innerHTML = '<div class="search-msg">スタッフ名を入力すると候補が出ます</div>';
+    return;
+  }
+  var hits = data.staff.filter(function(s){
+    return staffMatches(s, kw);
+  });
+  if (hits.length === 0) {
+    box.innerHTML = '<div class="search-msg">「'+esc(kw)+'」に一致するスタッフがいません</div>';
+    return;
+  }
+  for (var i=0;i<hits.length;i++){
+    box.appendChild(makeSearchItem(hits[i], "staff"));
   }
 }
 
-function addCompanion() {
-  var id = document.getElementById("companionSelect").value;
-  if (!id) { toast("同行者を選択してください"); return; }
-  if (selectedCompanions.some(function(x){return x.id===id;})) {
-    toast("すでに追加されています"); return;
+/* 同行者検索：入力した名前で絞り込み、候補リストを表示 */
+function renderCompanionSearch() {
+  var kw = document.getElementById("companionSearch").value.trim().toLowerCase();
+  var box = document.getElementById("companionSearchResult");
+  box.innerHTML = "";
+
+  if (data.staff.length === 0) {
+    box.innerHTML = '<div class="search-msg">スタッフ管理で登録してください</div>';
+    return;
   }
-  var s = findStaff(id);
-  selectedCompanions.push(JSON.parse(JSON.stringify(s)));
-  document.getElementById("companionSelect").value = "";
-  renderSelectedLists();
-  buildResult();
+  if (kw === "") {
+    box.innerHTML = '<div class="search-msg">スタッフ名を入力すると候補が出ます</div>';
+    return;
+  }
+  var hits = data.staff.filter(function(s){
+    return staffMatches(s, kw);
+  });
+  if (hits.length === 0) {
+    box.innerHTML = '<div class="search-msg">「'+esc(kw)+'」に一致するスタッフがいません</div>';
+    return;
+  }
+  for (var i=0;i<hits.length;i++){
+    box.appendChild(makeSearchItem(hits[i], "companion"));
+  }
 }
-function addStaff() {
-  var id = document.getElementById("staffSelect").value;
-  if (!id) { toast("スタッフを選択してください"); return; }
+
+/* カタカナをひらがなに変換し、小文字化して検索用の文字列にそろえる */
+function normalizeForSearch(text) {
+  var s = String(text || "");
+  s = s.replace(/[\u30A1-\u30F6]/g, function(ch){
+    return String.fromCharCode(ch.charCodeAt(0) - 0x60);
+  });
+  return s.toLowerCase().replace(/\s+/g, "");
+}
+
+/* スタッフ1人が検索語に一致するか（漢字名 と ふりがな の両方を見る） */
+function staffMatches(staff, keyword) {
+  var kw = normalizeForSearch(keyword);
+  if (kw === "") return false;
+  var inName = normalizeForSearch(staff.name).indexOf(kw) !== -1;
+  var inKana = staff.kana ? normalizeForSearch(staff.kana).indexOf(kw) !== -1 : false;
+  return inName || inKana;
+}
+
+/* 検索結果の1行を作る（kind: "staff" または "companion"） */
+function makeSearchItem(s, kind) {
+  var picked;
+  if (kind === "staff") {
+    picked = selectedStaff.some(function(x){return x.id===s.id;});
+  } else {
+    picked = selectedCompanions.some(function(x){return x.id===s.id;});
+  }
+  var sub = "ID: " + (s.staffId ? esc(s.staffId) : "（未登録）");
+  if (s.contact) sub += " ／ " + esc(s.contact);
+
+  var div = document.createElement("div");
+  div.className = "search-item" + (picked ? " is-picked" : "");
+  div.innerHTML =
+    '<div><div class="si-name">'+esc(s.name)+'</div>'+
+    '<div class="si-sub">'+sub+'</div></div>'+
+    '<div class="si-add">'+(picked ? "選択中" : "選ぶ")+'</div>';
+  div.onclick = function(){
+    if (kind === "staff") pickStaff(s.id);
+    else pickCompanion(s.id);
+  };
+  return div;
+}
+
+/* スタッフを選ぶ（1人まで・自動入れ替え） */
+function pickStaff(id) {
   if (selectedStaff.length === 1 && selectedStaff[0].id === id) {
     toast("すでに選ばれています"); return;
   }
   var s = findStaff(id);
-  /* スタッフ（送る相手）は1人まで。すでにいれば入れ替える */
+  if (!s) return;
   var wasReplaced = selectedStaff.length > 0;
   selectedStaff = [JSON.parse(JSON.stringify(s))];
-  document.getElementById("staffSelect").value = "";
   renderSelectedLists();
+  renderStaffSearch();
   buildResult();
   toast(wasReplaced ? "スタッフを入れ替えました" : "スタッフを選択しました");
+}
+
+/* 同行者を追加（何人でも） */
+function pickCompanion(id) {
+  if (selectedCompanions.some(function(x){return x.id===id;})) {
+    toast("すでに追加されています"); return;
+  }
+  var s = findStaff(id);
+  if (!s) return;
+  selectedCompanions.push(JSON.parse(JSON.stringify(s)));
+  renderSelectedLists();
+  renderCompanionSearch();
+  buildResult();
+  toast("同行者を追加しました");
 }
 function removeCompanion(id) {
   selectedCompanions = selectedCompanions.filter(function(x){return x.id!==id;});
   renderSelectedLists();
+  renderCompanionSearch();
   buildResult();
 }
 function removeStaff(id) {
   selectedStaff = selectedStaff.filter(function(x){return x.id!==id;});
   renderSelectedLists();
+  renderStaffSearch();
   buildResult();
 }
 function renderSelectedLists() {
@@ -1058,6 +1167,7 @@ function findCsvColumns(header) {
   }
   return {
     name:    indexOfAny(["スタッフ名","氏名","名前","name","Name"]),
+    kana:    indexOfAny(["ふりがな","フリガナ","よみがな","ヨミガナ","読み仮名","かな","カナ","kana"]),
     staffId: indexOfAny(["スタッフID","ID","現場ID","id","StaffID","スタッフＩＤ"]),
     contact: indexOfAny(["連絡先","電話","電話番号","メール","mail","contact","Contact"])
   };
@@ -1065,9 +1175,9 @@ function findCsvColumns(header) {
 
 function downloadCsvTemplate() {
   var lines = [
-    ["スタッフ名","スタッフID","連絡先"],
-    ["山田 太郎","A-1024","090-1234-5678"],
-    ["佐藤 花子","A-1025","sato@example.com"]
+    ["スタッフ名","ふりがな","スタッフID","連絡先"],
+    ["山田 太郎","やまだ たろう","A-1024","090-1234-5678"],
+    ["佐藤 花子","さとう はなこ","A-1025","sato@example.com"]
   ];
   var csv = lines.map(function(r){
     return r.map(csvCell).join(",");
@@ -1078,10 +1188,10 @@ function downloadCsvTemplate() {
 
 function exportCsv() {
   if (data.staff.length === 0) { toast("登録済みスタッフがいません"); return; }
-  var rows = [["スタッフ名","スタッフID","連絡先"]];
+  var rows = [["スタッフ名","ふりがな","スタッフID","連絡先"]];
   for (var i=0;i<data.staff.length;i++){
     var s = data.staff[i];
-    rows.push([s.name, s.staffId || "", s.contact || ""]);
+    rows.push([s.name, s.kana || "", s.staffId || "", s.contact || ""]);
   }
   var csv = rows.map(function(r){
     return r.map(csvCell).join(",");
@@ -1119,10 +1229,11 @@ function importCsv(event) {
       for (var r=1;r<rows.length;r++){
         var row = rows[r];
         var nm = (row[cols.name] || "").trim();
+        var kana = cols.kana !== -1 ? (row[cols.kana] || "").trim() : "";
         var sid = cols.staffId !== -1 ? (row[cols.staffId] || "").trim() : "";
         var contact = cols.contact !== -1 ? (row[cols.contact] || "").trim() : "";
         if (!nm || (!sid && !contact)) { skipped++; continue; }
-        imported.push({ id: uid(), name: nm, staffId: sid, contact: contact });
+        imported.push({ id: uid(), name: nm, kana: kana, staffId: sid, contact: contact });
       }
       if (imported.length === 0) {
         toast("有効なスタッフ行がありませんでした");
@@ -1299,7 +1410,8 @@ function toast(msg) {
    全体の再描画
    ========================================================= */
 function refreshAll() {
-  renderSelects();
+  renderStaffSearch();
+  renderCompanionSearch();
   renderSelectedLists();
   renderStaffManageList();
   buildResult();
